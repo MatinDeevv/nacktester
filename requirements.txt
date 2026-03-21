@@ -1,0 +1,6 @@
+PySide6
+matplotlib
+pandas
+numpy
+pyarrow
+MetaTrader5
