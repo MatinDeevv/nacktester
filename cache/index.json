@@ -5,8 +5,8 @@
     "start": "2016-03-25",
     "end": "2026-03-20",
     "bars": 13445,
-    "file": "cache\\XAUUSD_H4.parquet",
-    "updated": "2026-03-21 22:53:08.934799+00:00"
+    "file": "C:\\Users\\marti\\PycharmProjects\\PythonProject12\\cache\\XAUUSD_H4.parquet",
+    "updated": "2026-03-22 02:42:46.226035+00:00"
   },
   "XAUUSD_D1": {
     "symbol": "XAUUSD",
@@ -14,8 +14,8 @@
     "start": "2016-03-25",
     "end": "2026-03-20",
     "bars": 2578,
-    "file": "cache\\XAUUSD_D1.parquet",
-    "updated": "2026-03-21 22:53:08.941479+00:00"
+    "file": "C:\\Users\\marti\\PycharmProjects\\PythonProject12\\cache\\XAUUSD_D1.parquet",
+    "updated": "2026-03-22 02:42:46.233532+00:00"
   },
   "XAUUSD_H1": {
     "symbol": "XAUUSD",
@@ -23,8 +23,8 @@
     "start": "2016-03-25",
     "end": "2026-03-20",
     "bars": 50278,
-    "file": "cache\\XAUUSD_H1.parquet",
-    "updated": "2026-03-21 22:53:08.921227+00:00"
+    "file": "C:\\Users\\marti\\PycharmProjects\\PythonProject12\\cache\\XAUUSD_H1.parquet",
+    "updated": "2026-03-22 02:42:46.211276+00:00"
   },
   "XAUUSD_M1": {
     "symbol": "XAUUSD",
@@ -32,8 +32,8 @@
     "start": "2025-12-08",
     "end": "2026-03-20",
     "bars": 99999,
-    "file": "cache\\XAUUSD_M1.parquet",
-    "updated": "2026-03-21 22:53:08.723290+00:00"
+    "file": "C:\\Users\\marti\\PycharmProjects\\PythonProject12\\cache\\XAUUSD_M1.parquet",
+    "updated": "2026-03-22 01:31:52.881901+00:00"
   },
   "XAUUSD_M5": {
     "symbol": "XAUUSD",
@@ -41,8 +41,8 @@
     "start": "2024-10-21",
     "end": "2026-03-20",
     "bars": 99999,
-    "file": "cache\\XAUUSD_M5.parquet",
-    "updated": "2026-03-21 22:53:08.779746+00:00"
+    "file": "C:\\Users\\marti\\PycharmProjects\\PythonProject12\\cache\\XAUUSD_M5.parquet",
+    "updated": "2026-03-22 01:31:52.943130+00:00"
   },
   "XAUUSD_M15": {
     "symbol": "XAUUSD",
@@ -50,16 +50,16 @@
     "start": "2021-12-28",
     "end": "2026-03-20",
     "bars": 99999,
-    "file": "cache\\XAUUSD_M15.parquet",
-    "updated": "2026-03-21 22:53:08.833947+00:00"
+    "file": "C:\\Users\\marti\\PycharmProjects\\PythonProject12\\cache\\XAUUSD_M15.parquet",
+    "updated": "2026-03-22 01:31:53.004052+00:00"
   },
   "XAUUSD_M30": {
     "symbol": "XAUUSD",
     "timeframe": "M30",
-    "start": "2016-03-24",
+    "start": "2016-03-25",
     "end": "2026-03-20",
-    "bars": 96276,
-    "file": "cache\\XAUUSD_M30.parquet",
-    "updated": "2026-03-21 22:53:08.886282+00:00"
+    "bars": 96275,
+    "file": "C:\\Users\\marti\\PycharmProjects\\PythonProject12\\cache\\XAUUSD_M30.parquet",
+    "updated": "2026-03-22 01:31:53.063404+00:00"
   }
 }

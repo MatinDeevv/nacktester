@@ -34,6 +34,7 @@ SYMBOLS = ["XAUUSD","XAGUSD","EURUSD","GBPUSD","USDJPY","US500","XTIUSD","BTCUSD
 TIMEFRAMES = ["M1","M5","M15","M30","H1","H4","D1"]
 TF_YEARS = {"M1":2,"M5":5,"M15":10,"M30":10,"H1":10,"H4":10,"D1":10}
 TF_MINUTES = {"M1":1,"M5":5,"M15":15,"M30":30,"H1":60,"H4":240,"D1":1440,"W1":10080}
+DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / "cache"
 
 @dataclass
 class CacheEntry:
@@ -41,10 +42,12 @@ class CacheEntry:
     bars: int; file: str; updated: str
 
 class DataManager:
-    def __init__(self, cache_dir="cache"):
-        self.cache_dir = Path(cache_dir)
+    def __init__(self, cache_dir: Optional[str | Path] = None):
+        self.cache_dir = Path(cache_dir) if cache_dir is not None else DEFAULT_CACHE_DIR
+        self.cache_dir = self.cache_dir.expanduser().resolve()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.index: dict[str, CacheEntry] = {}
+        self._df_cache: dict[tuple[str, str, bool], pd.DataFrame] = {}
         self._load_index()
         self._mt5_ok = False
         self._symbol_map: dict[str, str] = {}
@@ -53,13 +56,15 @@ class DataManager:
         f = self.cache_dir / "index.json"
         if f.exists():
             try:
-                raw = json.loads(f.read_text())
+                raw = json.loads(f.read_text(encoding="utf-8"))
                 self.index = {k: CacheEntry(**v) for k, v in raw.items()}
-            except: self.index = {}
+            except Exception as exc:
+                logger.warning(f"Failed to load cache index {f}: {exc}")
+                self.index = {}
 
     def _save_index(self):
         raw = {k: v.__dict__ for k, v in self.index.items()}
-        (self.cache_dir / "index.json").write_text(json.dumps(raw, indent=2))
+        (self.cache_dir / "index.json").write_text(json.dumps(raw, indent=2), encoding="utf-8")
 
     def _key(self, s, tf): return f"{s}_{tf}"
     def _path(self, s, tf): return self.cache_dir / f"{s}_{tf}.parquet"
@@ -216,6 +221,8 @@ class DataManager:
                             bars=len(df), file=str(p),
                             updated=str(datetime.now(timezone.utc)),
                         )
+                        self._df_cache.pop((s, tf, False), None)
+                        self._df_cache.pop((s, tf, True), None)
                         results[k] = len(df)
                     else:
                         results[k] = 0
@@ -228,13 +235,79 @@ class DataManager:
         self._save_index()
         return results
 
-    def load(self, symbol: str, timeframe: str, start=None, end=None) -> Optional[pd.DataFrame]:
-        p = self._path(symbol, timeframe)
-        if not p.exists(): return None
-        df = pd.read_parquet(p)
-        if start: df = df[df.index >= pd.Timestamp(start, tz="UTC")]
-        if end: df = df[df.index <= pd.Timestamp(end, tz="UTC")]
-        return df if len(df) > 0 else None
+    def _normalize_loaded_df(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Normalize schema and index for stable downstream processing."""
+        if not isinstance(df.index, pd.DatetimeIndex):
+            df.index = pd.to_datetime(df.index, utc=True, errors="coerce")
+        elif df.index.tz is None:
+            df.index = df.index.tz_localize("UTC")
+        else:
+            df.index = df.index.tz_convert("UTC")
+
+        df = df.sort_index()
+        df = df[~df.index.duplicated(keep="first")]
+
+        for col in ("open", "high", "low", "close"):
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        if "volume" in df.columns:
+            df["volume"] = pd.to_numeric(df["volume"], errors="coerce")
+        return df
+
+    def _fill_time_gaps(self, df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
+        """Fill missing bars on the expected timeframe grid using forward-filled OHLC."""
+        minutes = TF_MINUTES.get(timeframe)
+        if not minutes or len(df) < 2:
+            return df
+
+        start = df.index.min()
+        end = df.index.max()
+        if pd.isna(start) or pd.isna(end) or start >= end:
+            return df
+
+        full_index = pd.date_range(start=start, end=end, freq=f"{int(minutes)}min", tz="UTC")
+        if len(full_index) <= len(df):
+            return df
+
+        # Prevent accidental explosive expansion on malformed sparse datasets.
+        if len(full_index) > 3_000_000:
+            logger.warning(f"Skipped gap fill for {timeframe}: expanded index too large ({len(full_index)})")
+            return df
+
+        out = df.reindex(full_index)
+        for col in ("open", "high", "low", "close"):
+            if col in out.columns:
+                out[col] = out[col].ffill()
+        if "volume" in out.columns:
+            out["volume"] = out["volume"].fillna(0.0)
+
+        return out.dropna(subset=[c for c in ("open", "high", "low", "close") if c in out.columns])
+
+    def load(self, symbol: str, timeframe: str, start=None, end=None, fill_gaps: bool = True) -> Optional[pd.DataFrame]:
+        cache_key = (symbol, timeframe, bool(fill_gaps))
+        cached = self._df_cache.get(cache_key)
+        if cached is not None:
+            df = cached
+        else:
+            p = self._path(symbol, timeframe)
+            if not p.exists():
+                return None
+            df = pd.read_parquet(p)
+            df = self._normalize_loaded_df(df)
+            if fill_gaps:
+                before = len(df)
+                df = self._fill_time_gaps(df, timeframe)
+                after = len(df)
+                if after > before:
+                    logger.info(f"Filled {after - before} missing bars for {symbol} {timeframe}")
+            self._df_cache[cache_key] = df
+
+        out = df
+        if start:
+            out = out[out.index >= pd.Timestamp(start, tz="UTC")]
+        if end:
+            out = out[out.index <= pd.Timestamp(end, tz="UTC")]
+        return out.copy(deep=False) if len(out) > 0 else None
 
     def get_cached(self) -> list[CacheEntry]:
         return list(self.index.values())

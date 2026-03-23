@@ -1,8 +1,9 @@
 """
-Aphelion Lab — Strategy Runtime
+Aphelion Lab - Strategy Runtime
 Base class for strategies + hot reload mechanism.
 """
 
+import hashlib
 import importlib
 import importlib.util
 import logging
@@ -16,6 +17,7 @@ logger = logging.getLogger("aphelion.strategy")
 
 class Strategy:
     """Base class for all strategies."""
+
     name = "BaseStrategy"
 
     def on_init(self, ctx):
@@ -50,50 +52,65 @@ class StrategyLoader:
             return getattr(self._current_strategy, "name", self._current_strategy.__class__.__name__)
         return "None"
 
+    @staticmethod
+    def _module_name_for_path(path: Path) -> str:
+        digest = hashlib.sha1(str(path).encode("utf-8")).hexdigest()[:12]
+        return f"_strategy_{path.stem}_{digest}"
+
+    @staticmethod
+    def _add_search_paths(path: Path) -> None:
+        search_paths = (
+            str(path.parent),
+            str(Path(__file__).resolve().parent),
+            str(Path(__file__).resolve().parent.parent),
+        )
+        for search_path in search_paths:
+            if search_path not in sys.path:
+                sys.path.insert(0, search_path)
+
     def load(self, filepath: str) -> Optional[Strategy]:
         """Load a strategy from a Python file."""
         self._error = None
         self._current_path = filepath
-        path = Path(filepath)
+        path = Path(filepath).expanduser().resolve()
 
         if not path.exists():
+            self._current_strategy = None
+            self._module = None
             self._error = f"File not found: {filepath}"
             logger.error(self._error)
             return None
 
-        try:
-            module_name = f"_strategy_{path.stem}"
+        module_name = self._module_name_for_path(path)
 
-            # Remove old module if exists
+        try:
             if module_name in sys.modules:
                 del sys.modules[module_name]
 
-            # Add the aphelion_lab directory to sys.path so strategies can import modules
-            aphelion_lab_dir = str(Path(__file__).parent)
-            if aphelion_lab_dir not in sys.path:
-                sys.path.insert(0, aphelion_lab_dir)
+            self._add_search_paths(path)
 
             spec = importlib.util.spec_from_file_location(module_name, str(path))
+            if spec is None or spec.loader is None:
+                self._current_strategy = None
+                self._module = None
+                self._error = f"Unable to create module spec for {path}"
+                logger.error(self._error)
+                return None
+
             module = importlib.util.module_from_spec(spec)
-            
-            # Inject Strategy class into module globals
             module.__dict__["Strategy"] = Strategy
-            
+
             sys.modules[module_name] = module
             spec.loader.exec_module(module)
             self._module = module
 
-            # Find the Strategy subclass
             strategy_cls = None
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
-                if (isinstance(attr, type) and
-                    issubclass(attr, Strategy) and
-                    attr is not Strategy):
+                if isinstance(attr, type) and issubclass(attr, Strategy) and attr is not Strategy:
                     strategy_cls = attr
                     break
 
-            # Fallback: look for any class with on_bar method
             if strategy_cls is None:
                 for attr_name in dir(module):
                     attr = getattr(module, attr_name)
@@ -102,15 +119,21 @@ class StrategyLoader:
                         break
 
             if strategy_cls is None:
+                self._current_strategy = None
+                self._module = None
                 self._error = f"No Strategy class found in {filepath}"
                 logger.error(self._error)
                 return None
 
             self._current_strategy = strategy_cls()
-            logger.info(f"Loaded strategy: {self.strategy_name} from {filepath}")
+            self._current_path = str(path)
+            logger.info(f"Loaded strategy: {self.strategy_name} from {path}")
             return self._current_strategy
 
-        except Exception as e:
+        except Exception:
+            sys.modules.pop(module_name, None)
+            self._current_strategy = None
+            self._module = None
             self._error = f"Error loading strategy:\n{traceback.format_exc()}"
             logger.error(self._error)
             return None
@@ -125,29 +148,35 @@ class StrategyLoader:
     def load_from_code(self, code: str, name: str = "InlineStrategy") -> Optional[Strategy]:
         """Load strategy from raw Python code string."""
         self._error = None
+        module_name = f"_strategy_inline_{name}"
+
         try:
-            module_name = f"_strategy_inline_{name}"
             if module_name in sys.modules:
                 del sys.modules[module_name]
 
-            # Create a module from code
             import types
+
             module = types.ModuleType(module_name)
-            module.__dict__["Strategy"] = Strategy  # Make base class available
+            module.__dict__["Strategy"] = Strategy
             exec(code, module.__dict__)
             sys.modules[module_name] = module
             self._module = module
 
-            # Find strategy class
             strategy_cls = None
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
-                if (isinstance(attr, type) and hasattr(attr, "on_bar") and
-                    attr_name != "Strategy" and attr_name[0].isupper()):
+                if (
+                    isinstance(attr, type)
+                    and hasattr(attr, "on_bar")
+                    and attr_name != "Strategy"
+                    and attr_name[0].isupper()
+                ):
                     strategy_cls = attr
                     break
 
             if strategy_cls is None:
+                self._current_strategy = None
+                self._module = None
                 self._error = "No Strategy class found in code"
                 return None
 
@@ -155,6 +184,9 @@ class StrategyLoader:
             self._current_path = None
             return self._current_strategy
 
-        except Exception as e:
+        except Exception:
+            sys.modules.pop(module_name, None)
+            self._current_strategy = None
+            self._module = None
             self._error = f"Error in strategy code:\n{traceback.format_exc()}"
             return None

@@ -1,0 +1,1 @@
+from strategies.regime_20_bundle import TrendEntropyPullback

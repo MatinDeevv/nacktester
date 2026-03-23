@@ -1,0 +1,1 @@
+from strategies.scalp_50_bundle import S22SupertrendOverlapSnap

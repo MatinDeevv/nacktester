@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Verify all 10 strategies load correctly"""
+"""Verify that the packaged strategies load correctly."""
+
+from pathlib import Path
+import sys
 
 from aphelion_lab.strategy_runtime import StrategyLoader
 
-strategies = [
+ROOT = Path(__file__).resolve().parent
+STRATEGY_DIR = ROOT / "aphelion_lab" / "strategies"
+STRATEGIES = [
     "st_01_sma_crossover.py",
     "st_02_rsi_mean_reversion.py",
     "st_03_ema_ribbon.py",
@@ -13,34 +18,42 @@ strategies = [
     "st_07_donchian_breakout.py",
     "st_08_macd_crossover.py",
     "st_09_volume_price.py",
-    "st_10_mean_reversion.py"
+    "st_10_mean_reversion.py",
 ]
 
-print("=" * 70)
-print("TESTING ALL 10 STRATEGIES")
-print("=" * 70)
 
-loader = StrategyLoader()
-success_count = 0
+def main() -> int:
+    print("=" * 70)
+    print("TESTING ALL 10 STRATEGIES")
+    print("=" * 70)
 
-for i, strat_file in enumerate(strategies, 1):
-    path = f"aphelion_lab/strategies/{strat_file}"
-    strat = loader.load(path)
-    
-    if strat:
-        status = "✓ OK"
-        name = loader.strategy_name
-        success_count += 1
-    else:
-        status = "✗ ERROR"
-        name = f"Failed to load: {loader.error[:40]}"
-    
-    print(f"{i:2d}. {status:10s} {name:40s}")
+    success_count = 0
 
-print("=" * 70)
-print(f"RESULT: {success_count}/10 strategies loaded successfully")
-if success_count == 10:
-    print("✓ ALL SYSTEMS OPERATIONAL")
-else:
-    print(f"✗ {10 - success_count} strategies failed")
-print("=" * 70)
+    for index, filename in enumerate(STRATEGIES, 1):
+        loader = StrategyLoader()
+        strategy = loader.load(str(STRATEGY_DIR / filename))
+
+        if strategy is not None:
+            status = "[OK]"
+            name = loader.strategy_name
+            success_count += 1
+        else:
+            status = "[ERROR]"
+            name = f"Failed to load: {loader.error[:40]}"
+
+        print(f"{index:2d}. {status:10s} {name:40s}")
+
+    print("=" * 70)
+    print(f"RESULT: {success_count}/10 strategies loaded successfully")
+    if success_count == len(STRATEGIES):
+        print("[OK] ALL SYSTEMS OPERATIONAL")
+        print("=" * 70)
+        return 0
+
+    print(f"[ERROR] {len(STRATEGIES) - success_count} strategies failed")
+    print("=" * 70)
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
